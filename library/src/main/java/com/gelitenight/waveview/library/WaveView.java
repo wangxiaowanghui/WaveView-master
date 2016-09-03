@@ -38,17 +38,20 @@ public class WaveView extends View {
     public static final int DEFAULT_FRONT_WAVE_COLOR = Color.parseColor("#ff32adfa");
 
     // shader containing repeated waves
-    private BitmapShader mWaveShader;
+    private BitmapShader mWaveBackShader;
+    private BitmapShader mWaveForeShader;
     // shader matrix
     private Matrix mShaderMatrix;
     // paint to draw wave
-    private Paint mViewPaint;
+    private Paint mViewBackPaint;
+    private Paint mViewForePaint;
 
     // 垂直和水平的便宜量
     private float mWaterLevelRatio = DEFAULT_WATER_LEVEL_RATIO;
-    private float mWaveShiftRatio = DEFAULT_WAVE_SHIFT_RATIO;
+    private float mWaveBackShiftRatio = DEFAULT_WAVE_SHIFT_RATIO;
+    private float mWaveForeShiftRatio = DEFAULT_WAVE_SHIFT_RATIO;
 
-    private float mAmplitudeRatio;
+    private float mAmplitudeRatio = 0.05f;
 
     public WaveView(Context context) {
         super(context);
@@ -67,14 +70,18 @@ public class WaveView extends View {
 
     private void init() {
         mShaderMatrix = new Matrix();
-        mViewPaint = new Paint();
-        mViewPaint.setAntiAlias(true);
+        mViewBackPaint = new Paint();
+        mViewBackPaint.setAntiAlias(true);
+
+        mViewForePaint = new Paint();
+        mViewForePaint.setAntiAlias(true);
     }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        createShader();
+        createBackShader();
+        createForeShader();
     }
 
     private float getRealCalHeight() {
@@ -86,17 +93,14 @@ public class WaveView extends View {
     }
 
     private float getAmplitude() {
-        return ScreenUtil.dp2px(getContext().getApplicationContext(), 10);
+        return ScreenUtil.dp2px(getContext().getApplicationContext(), 4);
     }
 
     /**
-     * Create the shader with default waves which repeat horizontally, and clamp vertically
+     * 创建背景色的shader
      */
-    private void createShader() {
+    private void createBackShader() {
         double mDefaultAngularFrequency = 2.0f * Math.PI / getWidth();
-
-        // 水的高度，默认高度是一半，此处计算排除了一个振幅的高度以保证最高点水正常飘着
-        float mDefaultWaveLength = getWidth();
 
         Bitmap bitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
@@ -105,60 +109,98 @@ public class WaveView extends View {
         wavePaint.setStrokeWidth(2);
         wavePaint.setAntiAlias(true);
 
-        // y=Asin(ωx+φ)+h
         final int endX = getWidth() + 1;
         final int endY = getHeight() + 1;
-
-        float[] waveY = new float[endX];
 
         wavePaint.setColor(DEFAULT_BEHIND_WAVE_COLOR);
         for (int beginX = 0; beginX < endX; beginX++) {
             double wx = beginX * mDefaultAngularFrequency;
             float beginY = (float) (getWaterLevel() + getAmplitude() * Math.sin(wx));
             canvas.drawLine(beginX, beginY, beginX, endY, wavePaint);
-
-            waveY[beginX] = beginY;
-        }
-
-        wavePaint.setColor(DEFAULT_FRONT_WAVE_COLOR);
-        final int wave2Shift = (int) (mDefaultWaveLength / 4);
-        for (int beginX = 0; beginX < endX; beginX++) {
-            canvas.drawLine(beginX, waveY[(beginX + wave2Shift) % endX], beginX, endY, wavePaint);
         }
 
         // 创建BitmapShader
-        mWaveShader = new BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP);
-        mViewPaint.setShader(mWaveShader);
+        mWaveBackShader = new BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP);
+        mViewBackPaint.setShader(mWaveBackShader);
+    }
+
+    /**
+     * 创建前景色的shader
+     */
+    private void createForeShader() {
+        double mDefaultAngularFrequency = 2.0f * Math.PI / getWidth();
+
+        Bitmap bitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+
+        Paint wavePaint = new Paint();
+        wavePaint.setStrokeWidth(2);
+        wavePaint.setAntiAlias(true);
+
+        final int endX = getWidth() + 1;
+        final int endY = getHeight() + 1;
+
+        wavePaint.setColor(DEFAULT_FRONT_WAVE_COLOR);
+        for (int beginX = 0; beginX < endX; beginX++) {
+            double wx = beginX * mDefaultAngularFrequency;
+            // 前景波比背景略低一些
+            float beginY = (float) (getWaterLevel() + ScreenUtil.dp2px(getContext().getApplicationContext(), 7) + getAmplitude() * Math.sin(wx));
+            canvas.drawLine(beginX, beginY, beginX, endY, wavePaint);
+        }
+
+        // 创建BitmapShader
+        mWaveForeShader = new BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP);
+        mViewForePaint.setShader(mWaveForeShader);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (mWaveShader != null) {
-            if (mViewPaint.getShader() == null) {
-                mViewPaint.setShader(mWaveShader);
-            }
-            mShaderMatrix.setScale(1, mAmplitudeRatio / 0.05f, 0, getWaterLevel());
-            // 计算横向和纵向的偏移，横向按照mWaveShiftRatio，纵向按照初试绘制高度和要求高度的差值
-            mShaderMatrix.postTranslate(
-                    mWaveShiftRatio * getWidth(),
-                    (DEFAULT_WATER_LEVEL_RATIO - mWaterLevelRatio) * getRealCalHeight());
+        if (mViewBackPaint.getShader() == null) {
+            mViewBackPaint.setShader(mWaveBackShader);
+        }
 
-            // assign matrix to invalidate the shader
-            mWaveShader.setLocalMatrix(mShaderMatrix);
+        if (mViewForePaint.getShader() == null) {
+            mViewForePaint.setShader(mWaveForeShader);
+        }
 
-            canvas.drawRect(0, 0, getWidth(), getHeight(), mViewPaint);
-        } else {
-            mViewPaint.setShader(null);
+        mShaderMatrix.setScale(1, mAmplitudeRatio / 0.05f, 0, getWaterLevel());
+        // 计算横向和纵向的偏移，横向按照mWaveShiftRatio，纵向按照初试绘制高度和要求高度的差值
+        mShaderMatrix.postTranslate(
+                mWaveBackShiftRatio * getWidth(),
+                (DEFAULT_WATER_LEVEL_RATIO - mWaterLevelRatio) * getRealCalHeight());
+
+        // assign matrix to invalidate the shader
+        mWaveBackShader.setLocalMatrix(mShaderMatrix);
+
+        mShaderMatrix.setScale(0.5f, mAmplitudeRatio / 0.05f, 0, getWaterLevel());
+        // 计算横向和纵向的偏移，横向按照mWaveShiftRatio，纵向按照初试绘制高度和要求高度的差值
+        mShaderMatrix.postTranslate(
+                mWaveForeShiftRatio * getWidth(),
+                (DEFAULT_WATER_LEVEL_RATIO - mWaterLevelRatio) * getRealCalHeight());
+        mWaveForeShader.setLocalMatrix(mShaderMatrix);
+
+        canvas.drawRect(0, 0, getWidth(), getHeight(), mViewBackPaint);
+        canvas.drawRect(0, 0, getWidth(), getHeight(), mViewForePaint);
+    }
+
+    public float getWaveBackShiftRatio() {
+        return mWaveBackShiftRatio;
+    }
+
+    public void setWaveBackShiftRatio(float waveShiftRatio) {
+        if (mWaveBackShiftRatio != waveShiftRatio) {
+            mWaveBackShiftRatio = waveShiftRatio;
+            invalidate();
         }
     }
 
-    public float getWaveShiftRatio() {
-        return mWaveShiftRatio;
+    public float getWaveForeShiftRatio() {
+        return mWaveForeShiftRatio;
     }
 
-    public void setWaveShiftRatio(float waveShiftRatio) {
-        if (mWaveShiftRatio != waveShiftRatio) {
-            mWaveShiftRatio = waveShiftRatio;
+    public void setWaveForeShiftRatio(float waveShiftRatio) {
+        if (mWaveForeShiftRatio != waveShiftRatio) {
+            mWaveForeShiftRatio = waveShiftRatio;
             invalidate();
         }
     }

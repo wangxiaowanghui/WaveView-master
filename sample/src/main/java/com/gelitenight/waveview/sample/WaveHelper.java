@@ -26,12 +26,19 @@ public class WaveHelper {
 
         // horizontal animation.
         // wave waves infinitely.
-        ObjectAnimator waveShiftAnim = ObjectAnimator.ofFloat(
-                mWaveView, "waveShiftRatio", 0f, 1f);
-        waveShiftAnim.setRepeatCount(ValueAnimator.INFINITE);
-        waveShiftAnim.setDuration(1200);
-        waveShiftAnim.setInterpolator(new LinearInterpolator());
-        animators.add(waveShiftAnim);
+        ObjectAnimator waveBackShiftAnim = ObjectAnimator.ofFloat(
+                mWaveView, "waveBackShiftRatio", 0f, 1f);
+        waveBackShiftAnim.setRepeatCount(ValueAnimator.INFINITE);
+        waveBackShiftAnim.setDuration(5000);
+        waveBackShiftAnim.setInterpolator(new LinearInterpolator());
+        animators.add(waveBackShiftAnim);
+
+        ObjectAnimator waveForeShiftAnim = ObjectAnimator.ofFloat(
+                mWaveView, "waveForeShiftRatio", 0f, 1f);
+        waveForeShiftAnim.setRepeatCount(ValueAnimator.INFINITE);
+        waveForeShiftAnim.setDuration(3000);
+        waveForeShiftAnim.setInterpolator(new LinearInterpolator());
+        animators.add(waveForeShiftAnim);
 
         // vertical animation.
         // water level increases from 0 to center of WaveView
@@ -43,13 +50,13 @@ public class WaveHelper {
 
         // amplitude animation.
         // wave grows big then grows small, repeatedly
-        ObjectAnimator amplitudeAnim = ObjectAnimator.ofFloat(
-                mWaveView, "amplitudeRatio", 0.02f, 0.05f);
-        amplitudeAnim.setRepeatCount(ValueAnimator.INFINITE);
-        amplitudeAnim.setRepeatMode(ValueAnimator.REVERSE);
-        amplitudeAnim.setDuration(5000);
-        amplitudeAnim.setInterpolator(new LinearInterpolator());
-        animators.add(amplitudeAnim);
+//        ObjectAnimator amplitudeAnim = ObjectAnimator.ofFloat(
+//                mWaveView, "amplitudeRatio", 0.02f, 0.05f);
+//        amplitudeAnim.setRepeatCount(ValueAnimator.INFINITE);
+//        amplitudeAnim.setRepeatMode(ValueAnimator.REVERSE);
+//        amplitudeAnim.setDuration(5000);
+//        amplitudeAnim.setInterpolator(new LinearInterpolator());
+//        animators.add(amplitudeAnim);
 
         mAnimatorSet = new AnimatorSet();
         mAnimatorSet.playTogether(animators);

@@ -77,6 +77,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        mWaveHelper.start(0.7f,0.1f);
+        mWaveHelper.start(0.3f, 0.1f);
     }
 }
