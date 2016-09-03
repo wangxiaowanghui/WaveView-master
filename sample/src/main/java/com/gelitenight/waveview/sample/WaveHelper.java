@@ -19,17 +19,9 @@ public class WaveHelper {
 
     public WaveHelper(WaveView waveView) {
         mWaveView = waveView;
-        initAnimation();
     }
 
-    public void start() {
-        mWaveView.setShowWave(true);
-        if (mAnimatorSet != null) {
-            mAnimatorSet.start();
-        }
-    }
-
-    private void initAnimation() {
+    public void start(float oldLevel, float newLevel) {
         List<Animator> animators = new ArrayList<>();
 
         // horizontal animation.
@@ -37,22 +29,22 @@ public class WaveHelper {
         ObjectAnimator waveShiftAnim = ObjectAnimator.ofFloat(
                 mWaveView, "waveShiftRatio", 0f, 1f);
         waveShiftAnim.setRepeatCount(ValueAnimator.INFINITE);
-        waveShiftAnim.setDuration(1000);
+        waveShiftAnim.setDuration(1200);
         waveShiftAnim.setInterpolator(new LinearInterpolator());
         animators.add(waveShiftAnim);
 
         // vertical animation.
         // water level increases from 0 to center of WaveView
         ObjectAnimator waterLevelAnim = ObjectAnimator.ofFloat(
-                mWaveView, "waterLevelRatio", 0f, 0.5f);
-        waterLevelAnim.setDuration(10000);
+                mWaveView, "waterLevelRatio", oldLevel, newLevel);
+        waterLevelAnim.setDuration(4000);
         waterLevelAnim.setInterpolator(new DecelerateInterpolator());
         animators.add(waterLevelAnim);
 
         // amplitude animation.
         // wave grows big then grows small, repeatedly
         ObjectAnimator amplitudeAnim = ObjectAnimator.ofFloat(
-                mWaveView, "amplitudeRatio", 0.0001f, 0.05f);
+                mWaveView, "amplitudeRatio", 0.02f, 0.05f);
         amplitudeAnim.setRepeatCount(ValueAnimator.INFINITE);
         amplitudeAnim.setRepeatMode(ValueAnimator.REVERSE);
         amplitudeAnim.setDuration(5000);
@@ -61,11 +53,14 @@ public class WaveHelper {
 
         mAnimatorSet = new AnimatorSet();
         mAnimatorSet.playTogether(animators);
+
+        if (mAnimatorSet != null) {
+            mAnimatorSet.start();
+        }
     }
 
     public void cancel() {
         if (mAnimatorSet != null) {
-//            mAnimatorSet.cancel();
             mAnimatorSet.end();
         }
     }

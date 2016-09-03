@@ -22,43 +22,20 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
-import android.graphics.Paint.Style;
 import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.view.View;
 
 public class WaveView extends View {
-    /**
-     * +------------------------+
-     * |<--wave length->        |______
-     * |   /\          |   /\   |  |
-     * |  /  \         |  /  \  | amplitude
-     * | /    \        | /    \ |  |
-     * |/      \       |/      \|__|____
-     * |        \      /        |  |
-     * |         \    /         |  |
-     * |          \  /          |  |
-     * |           \/           | water level
-     * |                        |  |
-     * |                        |  |
-     * +------------------------+__|____
-     */
-    private static final float DEFAULT_AMPLITUDE_RATIO = 0.05f;
+
+    // 初试高度占据整个高度的比例
     private static final float DEFAULT_WATER_LEVEL_RATIO = 0.5f;
-    private static final float DEFAULT_WAVE_LENGTH_RATIO = 1.0f;
+    // 整个水波在view中的偏移
     private static final float DEFAULT_WAVE_SHIFT_RATIO = 0.0f;
 
-    public static final int DEFAULT_BEHIND_WAVE_COLOR = Color.parseColor("#28FFFFFF");
-    public static final int DEFAULT_FRONT_WAVE_COLOR = Color.parseColor("#3CFFFFFF");
-    public static final ShapeType DEFAULT_WAVE_SHAPE = ShapeType.CIRCLE;
-
-    public enum ShapeType {
-        CIRCLE,
-        SQUARE
-    }
-
-    // if true, the shader will display the wave
-    private boolean mShowWave;
+    // 前景色和背景色
+    public static final int DEFAULT_BEHIND_WAVE_COLOR = Color.parseColor("#ff66c1f1");
+    public static final int DEFAULT_FRONT_WAVE_COLOR = Color.parseColor("#ff32adfa");
 
     // shader containing repeated waves
     private BitmapShader mWaveShader;
@@ -66,40 +43,25 @@ public class WaveView extends View {
     private Matrix mShaderMatrix;
     // paint to draw wave
     private Paint mViewPaint;
-    // paint to draw border
-    private Paint mBorderPaint;
 
-    private Context context;
-
-    private float mDefaultAmplitude;
-    private float mDefaultWaterLevel;
-    private float mDefaultWaveLength;
-    private double mDefaultAngularFrequency;
-
-    private float mAmplitudeRatio = DEFAULT_AMPLITUDE_RATIO;
-    private float mWaveLengthRatio = DEFAULT_WAVE_LENGTH_RATIO;
+    // 垂直和水平的便宜量
     private float mWaterLevelRatio = DEFAULT_WATER_LEVEL_RATIO;
     private float mWaveShiftRatio = DEFAULT_WAVE_SHIFT_RATIO;
 
-    private int mBehindWaveColor = DEFAULT_BEHIND_WAVE_COLOR;
-    private int mFrontWaveColor = DEFAULT_FRONT_WAVE_COLOR;
-    private ShapeType mShapeType = DEFAULT_WAVE_SHAPE;
+    private float mAmplitudeRatio;
 
     public WaveView(Context context) {
         super(context);
-        this.context = context;
         init();
     }
 
     public WaveView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        this.context = context;
         init();
     }
 
     public WaveView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-        this.context = context;
         init();
     }
 
@@ -109,16 +71,91 @@ public class WaveView extends View {
         mViewPaint.setAntiAlias(true);
     }
 
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        createShader();
+    }
+
+    private float getRealCalHeight() {
+        return getHeight() - getAmplitude();
+    }
+
+    private float getWaterLevel() {
+        return (getRealCalHeight()) * DEFAULT_WATER_LEVEL_RATIO + getAmplitude();
+    }
+
+    private float getAmplitude() {
+        return ScreenUtil.dp2px(getContext().getApplicationContext(), 10);
+    }
+
+    /**
+     * Create the shader with default waves which repeat horizontally, and clamp vertically
+     */
+    private void createShader() {
+        double mDefaultAngularFrequency = 2.0f * Math.PI / getWidth();
+
+        // 水的高度，默认高度是一半，此处计算排除了一个振幅的高度以保证最高点水正常飘着
+        float mDefaultWaveLength = getWidth();
+
+        Bitmap bitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+
+        Paint wavePaint = new Paint();
+        wavePaint.setStrokeWidth(2);
+        wavePaint.setAntiAlias(true);
+
+        // y=Asin(ωx+φ)+h
+        final int endX = getWidth() + 1;
+        final int endY = getHeight() + 1;
+
+        float[] waveY = new float[endX];
+
+        wavePaint.setColor(DEFAULT_BEHIND_WAVE_COLOR);
+        for (int beginX = 0; beginX < endX; beginX++) {
+            double wx = beginX * mDefaultAngularFrequency;
+            float beginY = (float) (getWaterLevel() + getAmplitude() * Math.sin(wx));
+            canvas.drawLine(beginX, beginY, beginX, endY, wavePaint);
+
+            waveY[beginX] = beginY;
+        }
+
+        wavePaint.setColor(DEFAULT_FRONT_WAVE_COLOR);
+        final int wave2Shift = (int) (mDefaultWaveLength / 4);
+        for (int beginX = 0; beginX < endX; beginX++) {
+            canvas.drawLine(beginX, waveY[(beginX + wave2Shift) % endX], beginX, endY, wavePaint);
+        }
+
+        // 创建BitmapShader
+        mWaveShader = new BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP);
+        mViewPaint.setShader(mWaveShader);
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        if (mWaveShader != null) {
+            if (mViewPaint.getShader() == null) {
+                mViewPaint.setShader(mWaveShader);
+            }
+            mShaderMatrix.setScale(1, mAmplitudeRatio / 0.05f, 0, getWaterLevel());
+            // 计算横向和纵向的偏移，横向按照mWaveShiftRatio，纵向按照初试绘制高度和要求高度的差值
+            mShaderMatrix.postTranslate(
+                    mWaveShiftRatio * getWidth(),
+                    (DEFAULT_WATER_LEVEL_RATIO - mWaterLevelRatio) * getRealCalHeight());
+
+            // assign matrix to invalidate the shader
+            mWaveShader.setLocalMatrix(mShaderMatrix);
+
+            canvas.drawRect(0, 0, getWidth(), getHeight(), mViewPaint);
+        } else {
+            mViewPaint.setShader(null);
+        }
+    }
+
     public float getWaveShiftRatio() {
         return mWaveShiftRatio;
     }
 
-    /**
-     * Shift the wave horizontally according to <code>waveShiftRatio</code>.
-     *
-     * @param waveShiftRatio Should be 0 ~ 1. Default to be 0.
-     *                       <br/>Result of waveShiftRatio multiples width of WaveView is the length to shift.
-     */
     public void setWaveShiftRatio(float waveShiftRatio) {
         if (mWaveShiftRatio != waveShiftRatio) {
             mWaveShiftRatio = waveShiftRatio;
@@ -130,12 +167,6 @@ public class WaveView extends View {
         return mWaterLevelRatio;
     }
 
-    /**
-     * Set water level according to <code>waterLevelRatio</code>.
-     *
-     * @param waterLevelRatio Should be 0 ~ 1. Default to be 0.5.
-     *                        <br/>Ratio of water level to WaveView height.
-     */
     public void setWaterLevelRatio(float waterLevelRatio) {
         if (mWaterLevelRatio != waterLevelRatio) {
             mWaterLevelRatio = waterLevelRatio;
@@ -143,16 +174,6 @@ public class WaveView extends View {
         }
     }
 
-    public float getAmplitudeRatio() {
-        return mAmplitudeRatio;
-    }
-
-    /**
-     * Set vertical size of wave according to <code>amplitudeRatio</code>
-     *
-     * @param amplitudeRatio Default to be 0.05. Result of amplitudeRatio + waterLevelRatio should be less than 1.
-     *                       <br/>Ratio of amplitude to height of WaveView.
-     */
     public void setAmplitudeRatio(float amplitudeRatio) {
         if (mAmplitudeRatio != amplitudeRatio) {
             mAmplitudeRatio = amplitudeRatio;
@@ -160,158 +181,7 @@ public class WaveView extends View {
         }
     }
 
-    public float getWaveLengthRatio() {
-        return mWaveLengthRatio;
-    }
-
-    /**
-     * Set horizontal size of wave according to <code>waveLengthRatio</code>
-     *
-     * @param waveLengthRatio Default to be 1.
-     *                        <br/>Ratio of wave length to width of WaveView.
-     */
-    public void setWaveLengthRatio(float waveLengthRatio) {
-        mWaveLengthRatio = waveLengthRatio;
-    }
-
-    public boolean isShowWave() {
-        return mShowWave;
-    }
-
-    public void setShowWave(boolean showWave) {
-        mShowWave = showWave;
-    }
-
-    public void setBorder(int width, int color) {
-        if (mBorderPaint == null) {
-            mBorderPaint = new Paint();
-            mBorderPaint.setAntiAlias(true);
-            mBorderPaint.setStyle(Style.STROKE);
-        }
-        mBorderPaint.setColor(color);
-        mBorderPaint.setStrokeWidth(width);
-
-        invalidate();
-    }
-
-    public void setWaveColor(int behindWaveColor, int frontWaveColor) {
-        mBehindWaveColor = behindWaveColor;
-        mFrontWaveColor = frontWaveColor;
-
-        // need to recreate shader when color changed
-        mWaveShader = null;
-        createShader();
-        invalidate();
-    }
-
-    public void setShapeType(ShapeType shapeType) {
-        mShapeType = shapeType;
-        invalidate();
-    }
-
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-
-        createShader();
-    }
-
-    /**
-     * Create the shader with default waves which repeat horizontally, and clamp vertically
-     */
-    private void createShader() {
-        mDefaultAngularFrequency = 2.0f * Math.PI / DEFAULT_WAVE_LENGTH_RATIO / getWidth();
-
-        // 振幅
-        mDefaultAmplitude = ScreenUtil.dp2px(context, 10);
-        // 水的高度
-        mDefaultWaterLevel = getHeight() * DEFAULT_WATER_LEVEL_RATIO;
-        mDefaultWaveLength = getWidth();
-
-        Bitmap bitmap = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-
-        Paint wavePaint = new Paint();
-        wavePaint.setStrokeWidth(2);
-        wavePaint.setAntiAlias(true);
-
-        // Draw default waves into the bitmap
-        // y=Asin(ωx+φ)+h
-        final int endX = getWidth() + 1;
-        final int endY = getHeight() + 1;
-
-        float[] waveY = new float[endX];
-
-        wavePaint.setColor(mBehindWaveColor);
-        for (int beginX = 0; beginX < endX; beginX++) {
-            double wx = beginX * mDefaultAngularFrequency;
-            float beginY = (float) (mDefaultWaterLevel + mDefaultAmplitude * Math.sin(wx));
-            canvas.drawLine(beginX, beginY, beginX, endY, wavePaint);
-
-            waveY[beginX] = beginY;
-        }
-
-        wavePaint.setColor(mFrontWaveColor);
-        final int wave2Shift = (int) (mDefaultWaveLength / 4);
-        for (int beginX = 0; beginX < endX; beginX++) {
-            canvas.drawLine(beginX, waveY[(beginX + wave2Shift) % endX], beginX, endY, wavePaint);
-        }
-
-        // use the bitamp to create the shader
-        mWaveShader = new BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP);
-        mViewPaint.setShader(mWaveShader);
-    }
-
-    @Override
-    protected void onDraw(Canvas canvas) {
-        // modify paint shader according to mShowWave state
-        if (mShowWave && mWaveShader != null) {
-            // first call after mShowWave, assign it to our paint
-            if (mViewPaint.getShader() == null) {
-                mViewPaint.setShader(mWaveShader);
-            }
-
-            // sacle shader according to mWaveLengthRatio and mAmplitudeRatio
-            // this decides the size(mWaveLengthRatio for width, mAmplitudeRatio for height) of waves
-            mShaderMatrix.setScale(
-                mWaveLengthRatio / DEFAULT_WAVE_LENGTH_RATIO,
-                mAmplitudeRatio / DEFAULT_AMPLITUDE_RATIO,
-                0,
-                mDefaultWaterLevel);
-            // translate shader according to mWaveShiftRatio and mWaterLevelRatio
-            // this decides the start position(mWaveShiftRatio for x, mWaterLevelRatio for y) of waves
-            mShaderMatrix.postTranslate(
-                mWaveShiftRatio * getWidth(),
-                (DEFAULT_WATER_LEVEL_RATIO - mWaterLevelRatio) * getHeight());
-
-            // assign matrix to invalidate the shader
-            mWaveShader.setLocalMatrix(mShaderMatrix);
-
-            float borderWidth = mBorderPaint == null ? 0f : mBorderPaint.getStrokeWidth();
-            switch (mShapeType) {
-                case CIRCLE:
-                    if (borderWidth > 0) {
-                        canvas.drawCircle(getWidth() / 2f, getHeight() / 2f,
-                            (getWidth() - borderWidth) / 2f - 1f, mBorderPaint);
-                    }
-                    float radius = getWidth() / 2f - borderWidth;
-                    canvas.drawCircle(getWidth() / 2f, getHeight() / 2f, radius, mViewPaint);
-                    break;
-                case SQUARE:
-                    if (borderWidth > 0) {
-                        canvas.drawRect(
-                            borderWidth / 2f,
-                            borderWidth / 2f,
-                            getWidth() - borderWidth / 2f - 0.5f,
-                            getHeight() - borderWidth / 2f - 0.5f,
-                            mBorderPaint);
-                    }
-                    canvas.drawRect(borderWidth, borderWidth, getWidth() - borderWidth,
-                        getHeight() - borderWidth, mViewPaint);
-                    break;
-            }
-        } else {
-            mViewPaint.setShader(null);
-        }
+    public float getAmplitudeRatio() {
+        return mAmplitudeRatio;
     }
 }
